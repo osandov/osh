@@ -1,40 +1,38 @@
 #include <ctype.h>
 #include <error.h>
 #include <errno.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "tokenizer.h"
 
 #define INITIAL_BUFFER_SIZE 256
 
-/* #ifdef DEBUG_TOKENS */
-
-char escape_sequence(char c)
-{
-    switch (c) {
-        case 'a':
-            return '\a';
-        case 'n':
-            return '\n';
-        case 't':
-            return '\t';
-        /* case '0': */
-            /* return '\0'; */
-        default:
-            return c;
-    }
-}
+static const char *special_strings[] = {
+    "&&", "||", "<<", ">>", "&!"
+};
 
 static inline int isspecial(int c)
 {
-    return c == '&' || c == '|' || c == '!' || c == '#';
+    return c == '&' || c == '|' ||
+           c == '!' || c == '#' ||
+           c == '<' || c == '>' ||
+           c == '(' || c == ')' ||
+           c == ';';
 }
 
 static inline bool need_split(char curr, char prev)
 {
-    return !isspace(prev) &&
-        (curr == '#' || (curr != prev && !(prev == '&' && curr == '!')));
+    if (isspace(prev))
+        return false;
+    else {
+        for (int i = 0; i < sizeof(special_strings) / sizeof(*special_strings);
+                ++i) {
+            if (prev == special_strings[i][0] && curr == special_strings[i][1])
+                return false;
+        }
+    }
+    return true;
 }
 
 static void add_token(struct token **tokens, size_t *n, size_t i,
@@ -65,6 +63,20 @@ static void write_char(char **buffer, size_t *n, char **p, char c)
     *((*p)++) = c;
 }
 
+#define ENTER_TOKEN(a)                                 \
+    do {                                               \
+        add_token(tokens, n, i++, head - buffer, (a)); \
+        in_token = true;                               \
+    } while(0)
+
+#define LEAVE_TOKEN()                                  \
+    do {                                               \
+        write_char(&buffer, &buffer_len, &head, '\0'); \
+        in_token = false;                              \
+    } while(0)
+
+#define WRITE_CHAR(c) write_char(&buffer, &buffer_len, &head, (c))
+
 ssize_t tokenize(struct token **tokens, size_t *n, char *line)
 {
     static char *buffer = NULL;
@@ -77,54 +89,45 @@ ssize_t tokenize(struct token **tokens, size_t *n, char *line)
     }
 
     char *head = buffer;
-    ptrdiff_t pos = -1;
-    ssize_t i = 0;
-
     char prev = ' ', quote = '\0';
-    bool escape = false;
+    ssize_t i = 0;
+    bool in_token = false, escape = false;
 
     for (char *p = line; *p; ++p) {
         char c = *p;
         if (quote) {
-            if (pos == -1)
-                pos = head - buffer;
+            if (!in_token)
+                ENTER_TOKEN(false);
             if (c == quote)
                 quote = '\0';
-            else {
-                if (escape) {
-                    char e = escape_sequence(c);
-                    if (e)
-                        write_char(&buffer, &buffer_len, &head, e);
-                } else {
-                    escape = c == '\\';
-                    if (!escape)
-                        write_char(&buffer, &buffer_len, &head, c);
-                }
-            }
+            else
+                WRITE_CHAR(c);
+        } else if (escape) {
+            if (!in_token)
+                ENTER_TOKEN(false);
+            WRITE_CHAR(c);
+            escape = false;
         } else {
-            if (isspecial(prev) && !isspecial(c)) {
-                write_char(&buffer, &buffer_len, &head, '\0');
-                add_token(tokens, n, i++, pos, true);
-                pos = -1;
-            }
+            if (isspecial(prev) && !isspecial(c))
+                LEAVE_TOKEN();
             if (isspace(c)) {
-                if (!isspace(prev) && !isspecial(prev)) {
-                    write_char(&buffer, &buffer_len, &head, '\0');
-                    add_token(tokens, n, i++, pos, false);
-                    pos = -1;
-                }
+                if (!isspace(prev) && !isspecial(prev))
+                    LEAVE_TOKEN();
             } else {
-                if (isspecial(c) && need_split(c, prev)) {
-                    write_char(&buffer, &buffer_len, &head, '\0');
-                    add_token(tokens, n, i++, pos, false);
-                    pos = -1;
+                if (isspecial(c)) {
+                    if (need_split(c, prev))
+                        LEAVE_TOKEN();
+                    if (!in_token)
+                        ENTER_TOKEN(true);
                 }
                 if (c == '\'' || c == '"')
                     quote = c;
                 else {
-                    if (pos == -1)
-                        pos = head - buffer;
-                    write_char(&buffer, &buffer_len, &head, c);
+                    if (!in_token)
+                        ENTER_TOKEN(false);
+                    escape = c == '\\';
+                    if (!escape)
+                        WRITE_CHAR(c);
                 }
             }
         }
@@ -139,29 +142,21 @@ ssize_t tokenize(struct token **tokens, size_t *n, char *line)
     for (ssize_t j = 0; j < i; ++j)
         (*tokens)[j].token = buffer + (*tokens)[j].offset;
 
+    return i;
+}
 
-#ifdef DEBUG_TOKENS
-    for (int j = 0; j < i; ++j) {
-        printf("'%s'", (*tokens)[j].token);
-        if ((*tokens)[j].special)
-            printf(" (*)\n");
-        else
-            printf("\n");
-    }
-    bool temp = false;
-    *head = '\0';
-    for (head = line_buffer; ; ++head) {
-        if (*head) {
-            temp = false;
-            printf("%c", *head);
-        } else if (temp)
-            break;
-        else {
-            temp = true;
-            printf("\n");
+void print_tokens(size_t num_tokens, struct token *tokens)
+{
+    printf("[");
+    if (num_tokens) {
+        printf("'%s'", tokens[0].token);
+        if (tokens[0].special)
+            printf("*");
+        for (int i = 1; i < num_tokens; ++i) {
+            printf(", '%s'", tokens[i].token);
+            if (tokens[i].special)
+                printf("*");
         }
     }
-#endif
-
-    return i;
+    printf("]\n");
 }
