@@ -5,8 +5,8 @@
 
 #include "parser.h"
 
-static int split_tree(struct syntax_tree *root, size_t level);
-static void split_node(struct syntax_tree *root, size_t i, size_t level);
+static int split_tree(struct SyntaxTree *root, size_t level);
+static void split_node(struct SyntaxTree *root, size_t i, size_t level);
 
 static const char *binary_tokens[][4] = {
     {"&", ";", "&!"},
@@ -15,20 +15,21 @@ static const char *binary_tokens[][4] = {
 
 #define NUM_LEVELS (sizeof(binary_tokens) / sizeof(*binary_tokens))
 
-static inline struct syntax_tree *syntax_node(size_t num_tokens)
+static inline struct SyntaxTree *syntax_node(size_t num_tokens)
 {
-    struct syntax_tree *root = malloc(sizeof(struct syntax_tree));
+    struct SyntaxTree *root = malloc(sizeof(struct SyntaxTree));
     if (!root)
         error(1, errno, "fatal error");
-    root->tokens = malloc(sizeof(struct token) * num_tokens);
+    root->tokens = malloc(sizeof(struct Token) * num_tokens);
     if (!root->tokens)
         error(1, errno, "fatal error");
+    root->type = NODE_PIPELINE;
     root->num_tokens = num_tokens;
     root->left = root->right = NULL;
     return root;
 }
 
-static int strip_parens(struct syntax_tree *root)
+static int strip_parens(struct SyntaxTree *root)
 {
     if (root->num_tokens == 0)
         return 0;
@@ -56,13 +57,13 @@ static int strip_parens(struct syntax_tree *root)
     if (strip) {
         root->num_tokens -= 2;
         memmove(root->tokens, root->tokens + 1,
-                root->num_tokens * sizeof(struct token));
+                root->num_tokens * sizeof(struct Token));
         return strip_parens(root);
     } else
         return parens == 0 ? 0 : -1;
 }
 
-static int split_tree(struct syntax_tree *root, size_t level)
+static int split_tree(struct SyntaxTree *root, size_t level)
 {
     ssize_t parens = 0;
 
@@ -91,22 +92,40 @@ static int split_tree(struct syntax_tree *root, size_t level)
     return 0;
 }
 
-static void split_node(struct syntax_tree *root, size_t i, size_t level)
+static enum NodeType get_node_type(char *token) {
+    if (strcmp(token, "&&") == 0)
+        return NODE_AND;
+    else if (strcmp(token, "||") == 0)
+        return NODE_OR;
+    else if (strcmp(token, "&") == 0)
+        return NODE_BACKGROUND;
+    else if (strcmp(token, ";") == 0)
+        return NODE_SEMICOLON;
+    else if (strcmp(token, "&!") == 0)
+        return NODE_DISOWN;
+    else
+        error(1, 0, "TODO");
+    return NODE_PIPELINE;
+}
+
+static void split_node(struct SyntaxTree *root, size_t i, size_t level)
 {
     root->left = syntax_node(i);
     memcpy(root->left->tokens, root->tokens,
-            root->left->num_tokens * sizeof(struct token));
+            root->left->num_tokens * sizeof(struct Token));
     split_tree(root->left, level);
 
     root->right = syntax_node(root->num_tokens - (i + 1));
     memcpy(root->right->tokens, root->tokens + (i + 1),
-            root->right->num_tokens * sizeof(struct token));
+            root->right->num_tokens * sizeof(struct Token));
     split_tree(root->right, level);
+
     root->tokens[0] = root->tokens[i];
     root->num_tokens = 1;
+    root->type = get_node_type(root->tokens[0].token);
 }
 
-static int parse_level(struct syntax_tree *root, size_t level)
+static int parse_level(struct SyntaxTree *root, size_t level)
 {
     if (!root->left && !root->right) {
         if (split_tree(root, level) == -1)
@@ -133,7 +152,7 @@ static bool valid_operator(char *token)
     return false;
 }
 
-struct syntax_tree *parse(size_t num_tokens, struct token *tokens)
+struct SyntaxTree *parse(size_t num_tokens, struct Token *tokens)
 {
     for (int i = 0; i < num_tokens; ++i) {
         if (tokens[i].special && !valid_operator(tokens[i].token)) {
@@ -142,8 +161,8 @@ struct syntax_tree *parse(size_t num_tokens, struct token *tokens)
         }
     }
 
-    struct syntax_tree *root = syntax_node(num_tokens);
-    memcpy(root->tokens, tokens, num_tokens * sizeof(struct token));
+    struct SyntaxTree *root = syntax_node(num_tokens);
+    memcpy(root->tokens, tokens, num_tokens * sizeof(struct Token));
     for (int i = 0; i < NUM_LEVELS; ++i) {
         if (parse_level(root, i) == -1)
             return NULL;
@@ -151,7 +170,7 @@ struct syntax_tree *parse(size_t num_tokens, struct token *tokens)
     return root;
 }
 
-void free_tree(struct syntax_tree *root)
+void free_tree(struct SyntaxTree *root)
 {
     if (root) {
         free(root->tokens);
@@ -161,7 +180,7 @@ void free_tree(struct syntax_tree *root)
     }
 }
 
-void print_tree(struct syntax_tree *root)
+void print_tree(struct SyntaxTree *root)
 {
     if (root) {
         print_tokens(root->num_tokens, root->tokens);

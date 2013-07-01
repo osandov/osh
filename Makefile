@@ -3,6 +3,7 @@ CFLAGS ?= -Wall -g -std=gnu99
 
 SRCS := main.c \
 	builtin.c \
+	cmdline.c \
 	parser.c \
 	tokenizer.c
 

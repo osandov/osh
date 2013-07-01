@@ -35,11 +35,11 @@ static inline bool need_split(char curr, char prev)
     return true;
 }
 
-static void add_token(struct token **tokens, size_t *n, size_t i,
+static void add_token(struct Token **tokens, size_t *n, size_t i,
                       ptrdiff_t offset, bool special)
 {
     if (i >= *n) {
-        struct token *new_tokens;
+        struct Token *new_tokens;
         *n = 2 * *n + 1;
         if (!(new_tokens = realloc(*tokens, *n * sizeof((*tokens)[0]))))
             error(1, errno, "fatal error");
@@ -77,7 +77,7 @@ static void write_char(char **buffer, size_t *n, char **p, char c)
 
 #define WRITE_CHAR(c) write_char(&buffer, &buffer_len, &head, (c))
 
-ssize_t tokenize(struct token **tokens, size_t *n, char *line)
+ssize_t tokenize(struct Token **tokens, size_t *n, char *line)
 {
     static char *buffer = NULL;
     static size_t buffer_len = INITIAL_BUFFER_SIZE;
@@ -145,7 +145,7 @@ ssize_t tokenize(struct token **tokens, size_t *n, char *line)
     return i;
 }
 
-void print_tokens(size_t num_tokens, struct token *tokens)
+void print_tokens(size_t num_tokens, struct Token *tokens)
 {
     printf("[");
     if (num_tokens) {

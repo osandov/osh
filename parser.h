@@ -3,14 +3,26 @@
 
 #include "tokenizer.h"
 
-struct syntax_tree {
-    struct token *tokens;
-    size_t num_tokens;
-    struct syntax_tree *left, *right;
+enum NodeType {
+    NODE_PIPELINE,
+    NODE_AND,
+    NODE_OR,
+    NODE_BACKGROUND,
+    NODE_SEMICOLON,
+    NODE_DISOWN
 };
 
-struct syntax_tree *parse(size_t token_count, struct token *tokens);
-void free_tree(struct syntax_tree *root);
-void print_tree(struct syntax_tree *root);
+struct SyntaxTree {
+    enum NodeType type;
+    struct {
+        struct Token *tokens;
+        size_t num_tokens;
+    };
+    struct SyntaxTree *left, *right;
+};
+
+struct SyntaxTree *parse(size_t token_count, struct Token *tokens);
+void free_tree(struct SyntaxTree *root);
+void print_tree(struct SyntaxTree *root);
 
 #endif /* PARSER_H */
