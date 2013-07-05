@@ -4,20 +4,20 @@
 #include "tokenizer.h"
 
 enum NodeType {
-    NODE_PIPELINE,
+    NODE_CMD,
+    NODE_PIPE,
+    NODE_ERR_PIPE,
     NODE_AND,
     NODE_OR,
-    NODE_BACKGROUND,
     NODE_SEMICOLON,
+    NODE_BACKGROUND,
     NODE_DISOWN
 };
 
 struct SyntaxTree {
     enum NodeType type;
-    struct {
-        struct Token *tokens;
-        size_t num_tokens;
-    };
+    struct Token *tokens;
+    size_t num_tokens;
     struct SyntaxTree *left, *right;
 };
 

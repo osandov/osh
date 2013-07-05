@@ -27,8 +27,10 @@ int main(int argc, char **argv)
 #ifdef DEBUG_PARSER
             print_tree(tree);
 #endif
-            exec_cmdline(tree);
-            free_tree(tree);
+            if (tree) {
+                exec_cmdline(tree);
+                free_tree(tree);
+            }
         }
         printf("%s", PS1);
     }

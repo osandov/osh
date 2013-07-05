@@ -5,12 +5,15 @@
 
 #include "parser.h"
 
-static int split_tree(struct SyntaxTree *root, size_t level);
-static void split_node(struct SyntaxTree *root, size_t i, size_t level);
+static int split_tree(struct SyntaxTree *root);
+static void split_node(struct SyntaxTree *root, size_t i);
 
 static const char *binary_tokens[][4] = {
+    /* Bind loosest (lowest precedence) */
     {"&", ";", "&!"},
     {"&&", "||"},
+    {"|", "|&"}
+    /* Bind tightest (highest precedence) */
 };
 
 #define NUM_LEVELS (sizeof(binary_tokens) / sizeof(*binary_tokens))
@@ -23,7 +26,7 @@ static inline struct SyntaxTree *syntax_node(size_t num_tokens)
     root->tokens = malloc(sizeof(struct Token) * num_tokens);
     if (!root->tokens)
         error(1, errno, "fatal error");
-    root->type = NODE_PIPELINE;
+    root->type = NODE_CMD;
     root->num_tokens = num_tokens;
     root->left = root->right = NULL;
     return root;
@@ -63,7 +66,7 @@ static int strip_parens(struct SyntaxTree *root)
         return parens == 0 ? 0 : -1;
 }
 
-static int split_tree(struct SyntaxTree *root, size_t level)
+static int split_tree(struct SyntaxTree *root)
 {
     ssize_t parens = 0;
 
@@ -72,18 +75,20 @@ static int split_tree(struct SyntaxTree *root, size_t level)
         return -1;
     }
 
-    for (ssize_t i = root->num_tokens - 1; i >= 0; --i) {
-        const char **operators = binary_tokens[level];
-        for (size_t j = 0; operators[j]; ++j) {
-            if (root->tokens[i].special) {
-                char *token = root->tokens[i].token;
-                if (strcmp(token, ")") == 0)
-                    ++parens;
-                else if (strcmp(token, "(") == 0)
-                    --parens;
-                else if (!parens && strcmp(token, operators[j]) == 0) {
-                    split_node(root, i, level);
-                    return 0;
+    for (size_t level = 0; level < NUM_LEVELS; ++level) {
+        for (ssize_t i = root->num_tokens - 1; i >= 0; --i) {
+            const char **operators = binary_tokens[level];
+            for (size_t j = 0; operators[j]; ++j) {
+                if (root->tokens[i].special) {
+                    char *token = root->tokens[i].token;
+                    if (strcmp(token, ")") == 0)
+                        ++parens;
+                    else if (strcmp(token, "(") == 0)
+                        --parens;
+                    else if (!parens && strcmp(token, operators[j]) == 0) {
+                        split_node(root, i);
+                        return 0;
+                    }
                 }
             }
         }
@@ -93,49 +98,40 @@ static int split_tree(struct SyntaxTree *root, size_t level)
 }
 
 static enum NodeType get_node_type(char *token) {
-    if (strcmp(token, "&&") == 0)
+    if (strcmp(token, "|") == 0)
+        return NODE_PIPE;
+    else if (strcmp(token, "|&") == 0)
+        return NODE_ERR_PIPE;
+    else if (strcmp(token, "&&") == 0)
         return NODE_AND;
     else if (strcmp(token, "||") == 0)
         return NODE_OR;
-    else if (strcmp(token, "&") == 0)
-        return NODE_BACKGROUND;
     else if (strcmp(token, ";") == 0)
         return NODE_SEMICOLON;
+    else if (strcmp(token, "&") == 0)
+        return NODE_BACKGROUND;
     else if (strcmp(token, "&!") == 0)
         return NODE_DISOWN;
     else
-        error(1, 0, "TODO");
-    return NODE_PIPELINE;
+        error(1, 0, "TODO: get_node_type");
+    return NODE_CMD;
 }
 
-static void split_node(struct SyntaxTree *root, size_t i, size_t level)
+static void split_node(struct SyntaxTree *root, size_t i)
 {
     root->left = syntax_node(i);
     memcpy(root->left->tokens, root->tokens,
             root->left->num_tokens * sizeof(struct Token));
-    split_tree(root->left, level);
+    split_tree(root->left);
 
     root->right = syntax_node(root->num_tokens - (i + 1));
     memcpy(root->right->tokens, root->tokens + (i + 1),
             root->right->num_tokens * sizeof(struct Token));
-    split_tree(root->right, level);
+    split_tree(root->right);
 
     root->tokens[0] = root->tokens[i];
     root->num_tokens = 1;
     root->type = get_node_type(root->tokens[0].token);
-}
-
-static int parse_level(struct SyntaxTree *root, size_t level)
-{
-    if (!root->left && !root->right) {
-        if (split_tree(root, level) == -1)
-            return -1;
-    } else {
-        if (parse_level(root->left, level) == -1 ||
-            parse_level(root->right, level) == -1)
-            return -1;
-    }
-    return 0;
 }
 
 static bool valid_operator(char *token)
@@ -146,10 +142,65 @@ static bool valid_operator(char *token)
             if (strcmp(token, operators[j]) == 0)
                 return true;
         }
-        if (strcmp(token, "(") == 0 || strcmp(token, ")") == 0)
+        if (strcmp(token, "(") == 0 || strcmp(token, ")") == 0 ||
+            strcmp(token, "<") == 0 || token[strlen(token) - 1] == '>')
             return true;
     }
     return false;
+}
+
+static int parse_helper(struct SyntaxTree *root)
+{
+    if (!root->left && !root->right) {
+        if (split_tree(root) == -1)
+            return -1;
+    } else {
+        if (parse_helper(root->left) == -1 ||
+            parse_helper(root->right) == -1)
+            return -1;
+    }
+    return 0;
+}
+
+static int is_full(struct SyntaxTree *root)
+{
+    switch (root->type) {
+        case NODE_CMD:
+            return 1;
+        case NODE_PIPE:
+        case NODE_ERR_PIPE:
+        case NODE_AND:
+        case NODE_OR:
+            if (root->left->num_tokens == 0 || root->right->num_tokens == 0) {
+                error(0, 0, "parse error near `%s'", root->tokens[0].token);
+                return 0;
+            }
+            break;
+        case NODE_SEMICOLON:
+            break;
+        case NODE_BACKGROUND:
+        case NODE_DISOWN:
+            if (root->left->num_tokens == 0) {
+                error(0, 0, "parse error near `%s'", root->tokens[0].token);
+                return 0;
+            }
+            break;
+    }
+    return is_full(root->left) && is_full(root->right);
+}
+
+static struct SyntaxTree *prune_tree(struct SyntaxTree *root)
+{
+    if (root) {
+        if (root->num_tokens == 0) {
+            free_tree(root);
+            root = NULL;
+        } else {
+            root->left = prune_tree(root->left);
+            root->right = prune_tree(root->right);
+        }
+    }
+    return root;
 }
 
 struct SyntaxTree *parse(size_t num_tokens, struct Token *tokens)
@@ -163,11 +214,12 @@ struct SyntaxTree *parse(size_t num_tokens, struct Token *tokens)
 
     struct SyntaxTree *root = syntax_node(num_tokens);
     memcpy(root->tokens, tokens, num_tokens * sizeof(struct Token));
-    for (int i = 0; i < NUM_LEVELS; ++i) {
-        if (parse_level(root, i) == -1)
-            return NULL;
+
+    if (parse_helper(root) == -1 || !is_full(root)) {
+        free_tree(root);
+        return NULL;
     }
-    return root;
+    return prune_tree(root);
 }
 
 void free_tree(struct SyntaxTree *root)
