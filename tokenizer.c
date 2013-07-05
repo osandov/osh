@@ -12,7 +12,7 @@ static const char *special_strings[] = {
     "&&", "||", ">&", "<<", ">>", "&!", "|&"
 };
 
-static inline int isspecial(int c)
+static inline bool isspecial(char c)
 {
     return c == '&' || c == '|' ||
            c == '!' || c == '#' ||

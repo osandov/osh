@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <error.h>
 #include <errno.h>
 #include <stdio.h>
@@ -9,11 +10,10 @@ static int split_tree(struct SyntaxTree *root);
 static void split_node(struct SyntaxTree *root, size_t i);
 
 static const char *binary_tokens[][4] = {
-    /* Bind loosest (lowest precedence) */
-    {"&", ";", "&!"},
+    {"&", ";", "&!"}, /* Bind loosest (lowest precedence) */
     {"&&", "||"},
-    {"|", "|&"}
-    /* Bind tightest (highest precedence) */
+    {"|", "|&"},
+    {"<", ">", ">>"} /* Bind tightest (highest precedence) */
 };
 
 #define NUM_LEVELS (sizeof(binary_tokens) / sizeof(*binary_tokens))
@@ -98,7 +98,13 @@ static int split_tree(struct SyntaxTree *root)
 }
 
 static enum NodeType get_node_type(char *token) {
-    if (strcmp(token, "|") == 0)
+    if (strcmp(token, "<") == 0)
+        return NODE_REDIR_IN;
+    else if (strcmp(token, ">") == 0)
+        return NODE_REDIR_OUT;
+    else if (strcmp(token, ">>") == 0)
+        return NODE_REDIR_APPEND;
+    else if (strcmp(token, "|") == 0)
         return NODE_PIPE;
     else if (strcmp(token, "|&") == 0)
         return NODE_ERR_PIPE;
@@ -113,8 +119,7 @@ static enum NodeType get_node_type(char *token) {
     else if (strcmp(token, "&!") == 0)
         return NODE_DISOWN;
     else
-        error(1, 0, "TODO: get_node_type");
-    return NODE_CMD;
+        assert(0);
 }
 
 static void split_node(struct SyntaxTree *root, size_t i)
@@ -162,18 +167,21 @@ static int parse_helper(struct SyntaxTree *root)
     return 0;
 }
 
-static int is_full(struct SyntaxTree *root)
+static bool is_full(struct SyntaxTree *root)
 {
     switch (root->type) {
         case NODE_CMD:
             return 1;
+        case NODE_REDIR_IN:
+        case NODE_REDIR_OUT:
+        case NODE_REDIR_APPEND:
         case NODE_PIPE:
         case NODE_ERR_PIPE:
         case NODE_AND:
         case NODE_OR:
             if (root->left->num_tokens == 0 || root->right->num_tokens == 0) {
                 error(0, 0, "parse error near `%s'", root->tokens[0].token);
-                return 0;
+                return false;
             }
             break;
         case NODE_SEMICOLON:
@@ -182,7 +190,7 @@ static int is_full(struct SyntaxTree *root)
         case NODE_DISOWN:
             if (root->left->num_tokens == 0) {
                 error(0, 0, "parse error near `%s'", root->tokens[0].token);
-                return 0;
+                return false;
             }
             break;
     }

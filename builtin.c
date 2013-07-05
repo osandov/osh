@@ -7,6 +7,7 @@
 typedef int(*builtin_function)(int, char**);
 
 static int builtin_cd(int argc, char **argv);
+static int builtin_exit(int argc, char **argv);
 
 struct builtin_entry {
     const char *name;
@@ -15,7 +16,17 @@ struct builtin_entry {
 
 static struct builtin_entry builtins[] = {
     {"cd", builtin_cd},
+    {"exit", builtin_exit},
 };
+
+int exec_builtin(int argc, char **argv)
+{
+    for (int i = 0; i < sizeof(builtins) / sizeof(*builtins); ++i) {
+        if (strcmp(builtins[i].name, argv[0]) == 0)
+            return builtins[i].func(argc, argv);
+    }
+    return -1;
+}
 
 static int builtin_cd(int argc, char **argv)
 {
@@ -44,11 +55,10 @@ static int builtin_cd(int argc, char **argv)
     return 0;
 }
 
-int exec_builtin(int argc, char **argv)
+static int builtin_exit(int argc, char **argv)
 {
-    for (int i = 0; i < sizeof(builtins) / sizeof(builtins[0]); ++i) {
-        if (strcmp(builtins[i].name, argv[0]) == 0)
-            return builtins[i].func(argc, argv);
-    }
-    return -1;
+    int status = 0;
+    if (argc > 1)
+        status = atoi(argv[1]) % 256;
+    exit(status);
 }

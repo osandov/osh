@@ -5,6 +5,9 @@
 
 enum NodeType {
     NODE_CMD,
+    NODE_REDIR_IN,
+    NODE_REDIR_OUT,
+    NODE_REDIR_APPEND,
     NODE_PIPE,
     NODE_ERR_PIPE,
     NODE_AND,

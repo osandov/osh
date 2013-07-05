@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "cmdline.h"
+#include "error.h"
 #include "parser.h"
 #include "tokenizer.h"
 
