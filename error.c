@@ -11,6 +11,7 @@
 
 const char *progname = DEFAULT_PROGRAM_NAME;
 
+/* See error.h */
 void error(int status, int errnum, const char *fmt, ...)
 {
     fflush(stdout);

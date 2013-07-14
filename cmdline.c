@@ -10,15 +10,62 @@
 #include "error.h"
 #include "cmdline.h"
 
+/**
+ * Execute a command node by first attempting to execute a built-in command and
+ * then an external command
+ * @return The exit status of the executed command
+ */
 static int exec_cmd(struct SyntaxTree *root);
+
+/** Redirect the input to a command and then execute it
+ * @return The exit status of the executed command
+ */
 static int exec_redir_in(struct SyntaxTree *root);
+
+/** Redirect the output of a command and then execute it
+ * @param append Whether to append to the file (otherwise truncate)
+ * @return The exit status of the executed command
+ */
 static int exec_redir_out(struct SyntaxTree *root, bool append);
+
+/**
+ * Connect two commands with a pipe and then execute them
+ * @param err_pipe Whether to redirect stderr of the first command to stdin of
+ * the second command (default is stdout to stdin)
+ * @return The exit status of the last command in the pipeline
+ */
 static int exec_pipe(struct SyntaxTree *root, bool err_pipe);
+
+/**
+ * Execute a command, then, if the exit status was zero, execute a second
+ * command
+ * @return The exit status of the last executed command
+ */
 static int exec_and(struct SyntaxTree *root);
+
+/**
+ * Execute a command, then, if the exit status was non-zero, execute a second
+ * command
+ * @return The exit status of the last executed command
+ */
 static int exec_or(struct SyntaxTree *root);
+
+/**
+ * Execute a command and wait for it to terminate, then execute a second
+ * command
+ * @return The exit status of the last executed command
+ */
 static int exec_semicolon(struct SyntaxTree *root);
+
+/**
+ * Execute a command but don't wait for it to terminate, then execute a second
+ * command
+ * @return The exit status of the last executed command, or zero if the last
+ * executed command was backgrounded
+ */
 static int exec_background(struct SyntaxTree *root);
 
+/* See cmdline.h */
 int exec_cmdline(struct SyntaxTree *root)
 {
     switch (root->type) {
@@ -48,6 +95,7 @@ int exec_cmdline(struct SyntaxTree *root)
     return -1;
 }
 
+/* See above */
 static int exec_cmd(struct SyntaxTree *root)
 {
     int retval;
@@ -80,6 +128,7 @@ static int exec_cmd(struct SyntaxTree *root)
     return retval;
 }
 
+/* See above */
 static int exec_redir_in(struct SyntaxTree *root)
 {
     int fd;
@@ -103,6 +152,7 @@ static int exec_redir_in(struct SyntaxTree *root)
     }
 }
 
+/* See above */
 static int exec_redir_out(struct SyntaxTree *root, bool append)
 {
     int fd, flags = O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC);
@@ -127,6 +177,7 @@ static int exec_redir_out(struct SyntaxTree *root, bool append)
     }
 }
 
+/* See above */
 static int exec_pipe(struct SyntaxTree *root, bool err_pipe)
 {
     int pipefd[2];
@@ -173,6 +224,7 @@ static int exec_pipe(struct SyntaxTree *root, bool err_pipe)
     return retval;
 }
 
+/* See above */
 static int exec_and(struct SyntaxTree *root)
 {
     int retval = exec_cmdline(root->left);
@@ -181,6 +233,7 @@ static int exec_and(struct SyntaxTree *root)
     return retval;
 }
 
+/* See above */
 static int exec_or(struct SyntaxTree *root)
 {
     int retval = exec_cmdline(root->left);
@@ -189,6 +242,7 @@ static int exec_or(struct SyntaxTree *root)
     return retval;
 }
 
+/* See above */
 static int exec_semicolon(struct SyntaxTree *root)
 {
     int retval = 0;
@@ -199,6 +253,7 @@ static int exec_semicolon(struct SyntaxTree *root)
     return retval;
 }
 
+/* See above */
 static int exec_background(struct SyntaxTree *root)
 {
     int retval = 0;
