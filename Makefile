@@ -1,5 +1,4 @@
-CC ?= gcc
-CFLAGS ?= -Wall -g -std=gnu99
+ALL_CFLAGS := -Wall -g -std=gnu99 $(CFLAGS) 
 
 SRCS := main.c \
 	builtin.c \
@@ -13,10 +12,10 @@ BUILD ?= build
 OBJS := $(addprefix $(BUILD)/, $(SRCS:.c=.o))
 
 $(BUILD)/osh: $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(ALL_CFLAGS) -o $@ $^
 
 $(BUILD)/%.o : %.c | $(BUILD)
-	$(CC) $(CFLAGS) -o $@ -c $<
+	$(CC) $(ALL_CFLAGS) -o $@ -c $<
 
 $(BUILD):
 	mkdir -p $(BUILD)
